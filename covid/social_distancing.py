@@ -63,6 +63,8 @@ class Person:
             else:
                 if np.random.uniform() < self.mortality_rate[overcapacity]:
                     self.state = 'dead'
+                    self.m = 1000
+                    self.vx, self.vy = 0,0
                 else:
                     self.days_infected = 0
                     self.state = 'recovered'
@@ -91,13 +93,13 @@ class Universe:
                  npeople, # How many people there are in the world
                  initial_infection_chance=0.1, # Initial fraction of population which is infected
                  distancing=0.0, # Fraction of population which practices distancing
-                 hospital_beds_percent = 1.0 # Better is 0.003 which is closer to reality
+                 hospital_beds_fraction = 1.0 # Better is 0.003 which is closer to reality
                 ):
         self.npeople = npeople
         self.ea = EffectiveArea()
         self.dt = 0.1
-        self.hospital_beds_percent = hospital_beds_percent
-        self.hospital_beds = int(npeople*hospital_beds_percent)
+        self.hospital_beds_fraction = hospital_beds_fraction
+        self.hospital_beds = npeople*hospital_beds_fraction
         self.data = None # gets set in self.run
         def _state():
             if np.random.uniform() < initial_infection_chance:
@@ -107,7 +109,7 @@ class Universe:
             return np.random.uniform() < distancing
         self.people = [Person(self.ea,_state(),_distancing()) for i in range(self.npeople)]
         # self.color = {'succeptible':0.5,'infected':0.0,'recovered':0.7} # old color scheme
-        self.color = {'succeptible':'lightblue','infected':'red','recovered':'green','dead':'brown'}
+        self.color = {'succeptible':'lightblue','infected':'red','recovered':'green','dead':'midnightblue'}
         
     def _step(self):
         """iterate through one timestep
@@ -190,8 +192,9 @@ class Universe:
 
 
 
-def getanim(u):
-    fig,ax = plt.subplots(figsize=(4,4))
+def getanim(u,show_capacity=True):
+    fig,ax = plt.subplots(figsize=(6,6))
+    ax.axis('off')
 
     left, width = 0.1, 0.85
     bottom, height = 0.1, 0.65
@@ -201,14 +204,18 @@ def getanim(u):
     rect_trend = [left, bottom + height + spacing, width, 0.2]
 
     ax_universe = plt.axes(rect_universe)
-    ax_universe.tick_params(axis='x', which='both',bottom=False,top=False,labelbottom=False)
-    ax_universe.axis('off')
     ax_trend = plt.axes(rect_trend)
+    #ax_universe.axis('off') # I want the box around it.
+    ax_universe.axes.get_xaxis().set_ticks([])
+    ax_universe.axes.get_yaxis().set_ticks([])    
+    ax_trend.axis('off')
 
-    s,i,r,d = u.data.s,u.data.i,u.data.r,u.data.r
+    s,i,r,d = u.data.s,u.data.i,u.data.r,u.data.d
 
-    ax_trend.stackplot(range(len(s)), i, s, r, d, labels=['sick','healthy','recovered','dead'],
-                       colors=[u.color['infected'],u.color['succeptible'],u.color['recovered'],u.color['dead']])
+    line, = draw_stacked_plot(u,ax_trend,show_time=True,show_capacity=show_capacity)
+
+    #ax_trend.stackplot(range(len(s)), i, s, r, d, labels=['sick','healthy','recovered','dead'],
+    #                   colors=[u.color['infected'],u.color['succeptible'],u.color['recovered'],u.color['dead']])
 
     scat, = u.draw(ax_universe)
     
@@ -218,12 +225,13 @@ def getanim(u):
         colors = np.array([u.color[_] for _ in u.data.state[i]])
         scat.set_color(colors)
 
-        _s,_i,_r = np.zeros(len(u.data.s)),np.zeros(len(u.data.s)),np.zeros(len(u.data.s))
-        _s[:i],_i[:i],_r[:i] = u.data.s[:i],u.data.i[:i],u.data.r[:i]
+        #_s,_i,_r = np.zeros(len(u.data.s)),np.zeros(len(u.data.s)),np.zeros(len(u.data.s))
+        #_s[:i],_i[:i],_r[:i] = u.data.s[:i],u.data.i[:i],u.data.r[:i]
         #ax_trend.stackplot(range(len(_s)), _s, _i, _r, labels=['s','i','r'],colors=['blue','green','yellow'])
         #ax_trend.legend(loc='upper left')
+        line.set_data([i,i],[0,u.npeople])
 
-        return scat,
+        return scat,line
 
 
     anim = animation.FuncAnimation(fig, drawframe, frames=u.data.steps,
@@ -232,10 +240,17 @@ def getanim(u):
 
 
 
-def draw_stacked_plot(u):
+def draw_stacked_plot(u,ax=None,show_time=False,show_capacity=True):
+    if ax is None:
+        fig,ax = plt.subplots()
+        ax.axis('off')
     s,i,r,d = u.data.s,u.data.i,u.data.r,u.data.d
-    plt.stackplot(range(len(s)), i, s, r, d, labels=['sick','healthy','recovered','dead'],
-                           colors=[u.color['infected'],u.color['succeptible'],u.color['recovered'],u.color['dead']])
-    plt.legend(loc='center left')
-    plt.hlines(y=u.hospital_beds*20,xmin=0,xmax=len(s),linestyle='dashed')
-    return None
+    ax.stackplot(range(len(s)), i, s, r, d, labels=['sick','healthy','recovered','dead'],
+                     colors=[u.color['infected'],u.color['succeptible'],u.color['recovered'],u.color['dead']])
+    ax.legend(loc='center left')
+    if show_capacity:
+        ax.hlines(y=u.hospital_beds*20,xmin=0,xmax=len(s),linestyle='dashed')
+    if show_time is True:
+        line, = ax.plot([0,0],[0,s[0]+i[0]+r[0]+d[0]],linestyle='dashed',color='black')
+        return line,
+    return
